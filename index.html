@@ -1,0 +1,1414 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Gestión de Arepas - Cloud</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .pedido-entregado {
+            background-color: #f0fdf4 !important;
+            border-color: #86efac !important;
+        }
+        .fade-in {
+            animation: fadeIn 0.3s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .scroll-container {
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        .scroll-container::-webkit-scrollbar {
+            width: 8px;
+        }
+        .scroll-container::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        .scroll-container::-webkit-scrollbar-thumb {
+            background: #ec4899;
+            border-radius: 10px;
+        }
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #ec4899;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-pink-50 to-purple-50 min-h-screen">
+    <!-- Indicador de conexión -->
+    <div id="connection-status" class="fixed top-4 right-4 z-50 px-4 py-2 rounded-full text-sm font-medium"></div>
+
+    <!-- Header -->
+    <header class="bg-white shadow-lg sticky top-0 z-40">
+        <div class="container mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <i class="fas fa-pepper-hot text-3xl text-pink-500"></i>
+                    <h1 class="text-2xl font-bold text-gray-800">Arepas del Sabor</h1>
+                    <span class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">Cloud ☁️</span>
+                </div>
+                <div class="text-sm text-gray-600">
+                    <i class="far fa-clock"></i>
+                    <span id="reloj"></span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Navegación -->
+    <nav class="bg-white shadow-md sticky top-16 z-30">
+        <div class="container mx-auto px-4 py-3">
+            <div class="flex space-x-2 overflow-x-auto">
+                <button id="btn-pedidos" onclick="cambiarTab('pedidos')" class="px-6 py-3 rounded-xl font-medium transition-all bg-pink-500 text-white shadow-lg">
+                    <i class="fas fa-shopping-cart mr-2"></i>Pedidos
+                </button>
+                <button id="btn-contabilidad" onclick="cambiarTab('contabilidad')" class="px-6 py-3 rounded-xl font-medium transition-all bg-pink-100 text-pink-600 hover:bg-pink-200">
+                    <i class="fas fa-calculator mr-2"></i>Contabilidad
+                </button>
+                <button id="btn-registro" onclick="cambiarTab('registro')" class="px-6 py-3 rounded-xl font-medium transition-all bg-pink-100 text-pink-600 hover:bg-pink-200">
+                    <i class="fas fa-clipboard-list mr-2"></i>Registro
+                </button>
+                <button id="btn-admin" onclick="cambiarTab('admin')" class="px-6 py-3 rounded-xl font-medium transition-all bg-gray-100 text-gray-600 hover:bg-gray-200">
+                    <i class="fas fa-user-shield mr-2"></i>Admin
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Loading Indicator -->
+    <div id="loading" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+        <div class="bg-white rounded-lg p-6">
+            <div class="loader"></div>
+            <p class="text-center mt-4 text-gray-600">Cargando...</p>
+        </div>
+    </div>
+
+    <!-- Contenido Principal -->
+    <main class="container mx-auto px-4 py-8">
+        <!-- Tab Pedidos -->
+        <div id="tab-pedidos" class="tab-content fade-in">
+            <div class="bg-white rounded-2xl shadow-xl p-6">
+                <div class="mb-6">
+                    <h2 class="text-2xl font-bold text-gray-800 mb-4">
+                        <i class="fas fa-calendar-day text-pink-500 mr-2"></i>Pedidos del Día
+                    </h2>
+                    <div class="flex items-center space-x-4">
+                        <label class="text-gray-700 font-medium">Fecha:</label>
+                        <input type="date" id="fecha-pedidos" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-pink-500 focus:border-pink-500">
+                        <button onclick="cargarPedidos()" class="bg-pink-500 hover:bg-pink-600 text-white px-4 py-2 rounded-lg transition-colors">
+                            <i class="fas fa-search mr-2"></i>Buscar
+                        </button>
+                    </div>
+                </div>
+                <div id="lista-pedidos" class="scroll-container space-y-4"></div>
+            </div>
+        </div>
+
+        <!-- Tab Contabilidad -->
+        <div id="tab-contabilidad" class="tab-content fade-in" style="display: none;">
+            <div class="bg-white rounded-2xl shadow-xl p-6">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">
+                    <i class="fas fa-chart-line text-green-500 mr-2"></i>Contabilidad Diaria
+                </h2>
+                
+                <div class="mb-6">
+                    <label class="text-gray-700 font-medium">Seleccionar Fecha:</label>
+                    <input type="date" id="fecha-contabilidad" class="ml-2 px-4 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500">
+                    <button onclick="cargarContabilidad()" class="ml-2 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg transition-colors">
+                        <i class="fas fa-sync mr-2"></i>Actualizar
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                    <div class="bg-gradient-to-r from-blue-500 to-blue-600 text-white p-4 rounded-xl">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm opacity-90">Total Arepas</p>
+                                <p id="total-arepas" class="text-3xl font-bold">0</p>
+                            </div>
+                            <i class="fas fa-bread-slice text-3xl opacity-50"></i>
+                        </div>
+                    </div>
+                    <div class="bg-gradient-to-r from-green-500 to-green-600 text-white p-4 rounded-xl">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm opacity-90">Ventas Totales</p>
+                                <p id="total-vendido" class="text-3xl font-bold">$0</p>
+                            </div>
+                            <i class="fas fa-cash-register text-3xl opacity-50"></i>
+                        </div>
+                    </div>
+                    <div class="bg-gradient-to-r from-purple-500 to-purple-600 text-white p-4 rounded-xl">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm opacity-90">Gastos</p>
+                                <p id="total-gastos" class="text-3xl font-bold">$0</p>
+                            </div>
+                            <i class="fas fa-receipt text-3xl opacity-50"></i>
+                        </div>
+                    </div>
+                    <div class="bg-gradient-to-r from-yellow-500 to-orange-500 text-white p-4 rounded-xl">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm opacity-90">Ganancia Neta</p>
+                                <p id="ganancia-neta" class="text-3xl font-bold">$0</p>
+                            </div>
+                            <i class="fas fa-chart-pie text-3xl opacity-50"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                    <div class="bg-gray-50 p-4 rounded-xl">
+                        <h3 class="font-semibold text-gray-700 mb-3">
+                            <i class="fas fa-money-bill-wave text-green-500 mr-2"></i>Métodos de Pago
+                        </h3>
+                        <div class="space-y-2">
+                            <div class="flex justify-between items-center p-2 bg-white rounded-lg">
+                                <span class="text-gray-700"><i class="fas fa-hand-holding-usd mr-2"></i>Efectivo</span>
+                                <span id="total-efectivo" class="font-bold text-green-600">$0</span>
+                            </div>
+                            <div class="flex justify-between items-center p-2 bg-white rounded-lg">
+                                <span class="text-gray-700"><i class="fas fa-credit-card mr-2"></i>Transferencia</span>
+                                <span id="total-transferencias" class="font-bold text-blue-600">$0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-gray-50 p-4 rounded-xl">
+                        <h3 class="font-semibold text-gray-700 mb-3">
+                            <i class="fas fa-truck text-purple-500 mr-2"></i>Ventas Mayoristas
+                        </h3>
+                        <div class="space-y-2">
+                            <div class="flex justify-between items-center p-2 bg-white rounded-lg">
+                                <span class="text-gray-700">Arepas Vendidas</span>
+                                <span id="total-arepas-mayorista" class="font-bold text-purple-600">0</span>
+                            </div>
+                            <div class="flex justify-between items-center p-2 bg-white rounded-lg">
+                                <span class="text-gray-700">Efectivo</span>
+                                <span id="total-efectivo-mayorista" class="font-bold text-green-600">$0</span>
+                            </div>
+                            <div class="flex justify-between items-center p-2 bg-white rounded-lg">
+                                <span class="text-gray-700">Transferencia</span>
+                                <span id="total-transfer-mayorista" class="font-bold text-blue-600">$0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-red-50 p-4 rounded-xl">
+                    <h3 class="font-semibold text-red-700 mb-3">
+                        <i class="fas fa-plus-circle mr-2"></i>Registrar Nuevo Gasto
+                    </h3>
+                    <div class="flex space-x-2">
+                        <input type="text" id="descripcion-gasto" placeholder="Descripción del gasto" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500">
+                        <input type="number" id="valor-gasto" placeholder="Valor" class="w-32 px-4 py-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500">
+                        <button onclick="guardarGasto()" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition-colors">
+                            <i class="fas fa-save mr-2"></i>Guardar
+                        </button>
+                    </div>
+                    <div id="lista-gastos" class="mt-4"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab Registro -->
+        <div id="tab-registro" class="tab-content fade-in" style="display: none;">
+            <div class="bg-white rounded-2xl shadow-xl p-6">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">
+                    <i class="fas fa-clipboard-list text-blue-500 mr-2"></i>Registro de Pedidos
+                </h2>
+
+                <!-- Filtros -->
+                <div class="bg-gray-50 p-4 rounded-xl mb-6">
+                    <h3 class="font-semibold text-gray-700 mb-3">Filtros de Búsqueda</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <input type="text" id="filtro-cliente" placeholder="Buscar cliente..." onkeyup="filtrarPedidos()" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                        <select id="filtro-estado" onchange="filtrarPedidos()" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                            <option value="">Todos los estados</option>
+                            <option value="pendiente">Pendiente</option>
+                            <option value="entregado">Entregado</option>
+                        </select>
+                        <input type="date" id="filtro-fecha" onchange="filtrarPedidos()" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                        <button onclick="exportarPedidos()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors">
+                            <i class="fas fa-download mr-2"></i>Exportar
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Tabla de Registros -->
+                <div class="overflow-x-auto">
+                    <table class="w-full table-auto">
+                        <thead class="bg-gray-100">
+                            <tr>
+                                <th class="px-4 py-2 text-left">Fecha</th>
+                                <th class="px-4 py-2 text-left">Cliente</th>
+                                <th class="px-4 py-2 text-left">Producto</th>
+                                <th class="px-4 py-2 text-left">Cantidad</th>
+                                <th class="px-4 py-2 text-left">Total</th>
+                                <th class="px-4 py-2 text-left">Estado</th>
+                                <th class="px-4 py-2 text-left">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabla-registros" class="divide-y divide-gray-200">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab Admin -->
+        <div id="tab-admin" class="tab-content fade-in" style="display: none;">
+            <div class="bg-white rounded-2xl shadow-xl p-6">
+                <!-- Login Admin -->
+                <div id="admin-login">
+                    <h2 class="text-2xl font-bold text-gray-800 mb-6">
+                        <i class="fas fa-lock text-gray-600 mr-2"></i>Acceso Administrador
+                    </h2>
+                    <div class="max-w-md mx-auto">
+                        <input type="password" id="admin-pass" placeholder="Contraseña" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-gray-500 focus:border-gray-500 mb-4">
+                        <button onclick="loginAdmin()" class="w-full bg-gray-700 hover:bg-gray-800 text-white font-bold py-3 rounded-lg transition-colors">
+                            <i class="fas fa-sign-in-alt mr-2"></i>Ingresar
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Panel Admin -->
+                <div id="admin-panel" style="display: none;">
+                    <h2 class="text-2xl font-bold text-gray-800 mb-6">
+                        <i class="fas fa-cogs text-gray-600 mr-2"></i>Panel de Administración
+                    </h2>
+
+                    <!-- Tabs del Admin -->
+                    <div class="mb-6 border-b border-gray-200">
+                        <nav class="flex space-x-4">
+                            <button onclick="mostrarSubTab('productos')" class="pb-2 px-1 border-b-2 border-blue-500 font-medium text-blue-600">
+                                Productos
+                            </button>
+                            <button onclick="mostrarSubTab('clientes')" class="pb-2 px-1 border-b-2 border-transparent font-medium text-gray-600 hover:text-gray-800">
+                                Clientes
+                            </button>
+                            <button onclick="mostrarSubTab('reportes')" class="pb-2 px-1 border-b-2 border-transparent font-medium text-gray-600 hover:text-gray-800">
+                                Reportes
+                            </button>
+                        </nav>
+                    </div>
+
+                    <!-- Sub-tab Productos -->
+                    <div id="sub-tab-productos">
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <!-- Agregar Producto -->
+                            <div class="bg-gray-50 p-4 rounded-xl">
+                                <h3 class="font-semibold text-gray-700 mb-3">
+                                    <i class="fas fa-plus-circle text-green-500 mr-2"></i>Agregar Nuevo Producto
+                                </h3>
+                                <div class="space-y-3">
+                                    <input type="text" id="nombre-producto" placeholder="Nombre del producto" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500">
+                                    <input type="number" id="precio-natural" placeholder="Precio Natural" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500">
+                                    <input type="number" id="precio-mayorista" placeholder="Precio Mayorista" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500">
+                                    <button onclick="agregarProducto()" class="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-2 rounded-lg transition-colors">
+                                        <i class="fas fa-plus mr-2"></i>Agregar Producto
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Lista de Productos -->
+                            <div class="bg-gray-50 p-4 rounded-xl">
+                                <h3 class="font-semibold text-gray-700 mb-3">
+                                    <i class="fas fa-edit text-blue-500 mr-2"></i>Editar Productos
+                                </h3>
+                                <div id="lista-productos-admin" class="space-y-3 max-h-96 overflow-y-auto"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sub-tab Clientes -->
+                    <div id="sub-tab-clientes" style="display: none;">
+                        <div class="bg-gray-50 p-4 rounded-xl">
+                            <h3 class="font-semibold text-gray-700 mb-3">
+                                <i class="fas fa-users text-purple-500 mr-2"></i>Gestión de Clientes
+                            </h3>
+                            <div class="mb-4">
+                                <button onclick="exportarClientes()" class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg transition-colors mr-2">
+                                    <i class="fas fa-download mr-2"></i>Exportar
+                                </button>
+                                <button onclick="cargarClientes()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors">
+                                    <i class="fas fa-sync mr-2"></i>Actualizar
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="w-full table-auto">
+                                    <thead class="bg-gray-100">
+                                        <tr>
+                                            <th class="px-4 py-2 text-left">Cliente</th>
+                                            <th class="px-4 py-2 text-left">Teléfono</th>
+                                            <th class="px-4 py-2 text-left">Tipo</th>
+                                            <th class="px-4 py-2 text-left">Total Comprado</th>
+                                            <th class="px-4 py-2 text-left">Arepas</th>
+                                            <th class="px-4 py-2 text-left">Deuda</th>
+                                            <th class="px-4 py-2 text-left">Estado</th>
+                                            <th class="px-4 py-2 text-left">Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tabla-clientes" class="divide-y divide-gray-200">
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sub-tab Reportes -->
+                    <div id="sub-tab-reportes" style="display: none;">
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div class="bg-gray-50 p-4 rounded-xl">
+                                <h3 class="font-semibold text-gray-700 mb-3">Ganancia Mensual</h3>
+                                <div style="height: 300px;">
+                                    <canvas id="chart-mensual"></canvas>
+                                </div>
+                            </div>
+                            <div class="bg-gray-50 p-4 rounded-xl">
+                                <h3 class="font-semibold text-gray-700 mb-3">Ventas por Producto</h3>
+                                <div style="height: 300px;">
+                                    <canvas id="chart-productos"></canvas>
+                                </div>
+                            </div>
+                            <div class="bg-gray-50 p-4 rounded-xl lg:col-span-2">
+                                <h3 class="font-semibold text-gray-700 mb-3">Tendencia de Ganancia (30 días)</h3>
+                                <div style="height: 300px;">
+                                    <canvas id="chart-diaria"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal Nuevo Pedido -->
+    <div id="modal-pedido" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div class="p-6">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold text-gray-800">
+                        <i class="fas fa-plus-circle text-pink-500 mr-2"></i>Nuevo Pedido
+                    </h2>
+                    <button onclick="cerrarModalPedido()" class="text-gray-500 hover:text-gray-700">
+                        <i class="fas fa-times text-2xl"></i>
+                    </button>
+                </div>
+
+                <form id="form-pedido" class="space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-gray-700 font-medium mb-2">Cliente *</label>
+                            <div class="relative">
+                                <input type="text" id="nombre_cliente" list="clientes-list" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-pink-500 focus:border-pink-500">
+                                <datalist id="clientes-list"></datalist>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 font-medium mb-2">Teléfono</label>
+                            <input type="tel" id="telefono" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-pink-500 focus:border-pink-500">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-gray-700 font-medium mb-2">Tipo de Cliente</label>
+                            <select id="tipo_cliente" onchange="calcularPrecio()" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-pink-500 focus:border-pink-500">
+                                <option value="Natural">Natural</option>
+                                <option value="Mayorista">Mayorista</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 font-medium mb-2">Método de Pago</label>
+                            <select id="metodo_pago" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-pink-500 focus:border-pink-500">
+                                <option value="Efectivo">Efectivo</option>
+                                <option value="Transferencia">Transferencia</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-gray-700 font-medium mb-2">Dirección de Entrega</label>
+                        <input type="text" id="direccion" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-pink-500 focus:border-pink-500">
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-gray-700 font-medium mb-2">Tipo de Arepa *</label>
+                            <select id="tipo_arepa" onchange="calcularPrecio()" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-pink-500 focus:border-pink-500">
+                                <option value="">Seleccionar...</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 font-medium mb-2">Cantidad</label>
+                            <input type="number" id="cantidad" value="1" min="1" onchange="calcularPrecio()" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-pink-500 focus:border-pink-500">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-gray-700 font-medium mb-2">Fecha de Entrega *</label>
+                            <input type="date" id="fecha_entrega" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-pink-500 focus:border-pink-500">
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 font-medium mb-2">Fecha de Registro *</label>
+                            <input type="date" id="fecha_registro" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-pink-500 focus:border-pink-500">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-gray-700 font-medium mb-2">Notas (Opcional)</label>
+                        <textarea id="notas" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-pink-500 focus:border-pink-500" rows="2"></textarea>
+                    </div>
+
+                    <div id="precio-total-container" class="hidden bg-pink-50 p-4 rounded-xl">
+                        <div class="flex justify-between items-center">
+                            <span class="text-lg font-medium text-gray-700">Total a Pagar:</span>
+                            <span id="precio-total" class="text-2xl font-bold text-pink-600">$0</span>
+                        </div>
+                    </div>
+
+                    <div class="flex space-x-4">
+                        <button type="button" onclick="guardarPedido()" class="flex-1 bg-pink-500 hover:bg-pink-600 text-white font-bold py-3 rounded-lg transition-colors">
+                            <i class="fas fa-save mr-2"></i>Guardar Pedido
+                        </button>
+                        <button type="button" onclick="cerrarModalPedido()" class="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 font-bold py-3 rounded-lg transition-colors">
+                            <i class="fas fa-times mr-2"></i>Cancelar
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Botón Flotante Nuevo Pedido -->
+    <button onclick="abrirModalPedido()" class="fixed bottom-8 right-8 bg-pink-500 hover:bg-pink-600 text-white rounded-full p-4 shadow-lg transition-all hover:scale-110 z-20">
+        <i class="fas fa-plus text-2xl"></i>
+    </button>
+
+    <script>
+        // ========================================
+        // CONFIGURACIÓN DE SUPABASE
+        // ========================================
+        // IMPORTANTE: Reemplaza estos valores con los de tu proyecto
+        const SUPABASE_URL = 'https://iukzrtbtruwtlnlmntcc.supabase.co'; // https://xxxxx.supabase.co
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1a3pydGJ0cnV3dGxubG1udGNjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI5MDQzNDMsImV4cCI6MjA3ODQ4MDM0M30.tjQsXbS7tdhnbw3USnBl3HxxKZvsHfvdbgQ2coaIfQY'; // eyJxxxxx...
+
+        // Inicializar cliente de Supabase
+        const { createClient } = supabase;
+        const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        // ========================================
+        // VARIABLES GLOBALES
+        // ========================================
+        let productos = [];
+        let pedidos = [];
+        let gastos = [];
+        let clientes = [];
+        
+        let adminLoggedIn = false;
+        const adminPassword = "1234"; 
+        
+        let chartMensualInstance; 
+        let chartProductosInstance; 
+        let chartDiariaInstance;
+
+        // ========================================
+        // FUNCIONES DE UTILIDAD
+        // ========================================
+        const obtenerFechaHoy = () => {
+            const hoy = new Date();
+            const year = hoy.getFullYear();
+            const month = String(hoy.getMonth() + 1).padStart(2, '0');
+            const day = String(hoy.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+
+        const normalizarFecha = (fechaStr) => {
+            if (!fechaStr) return '';
+            if (fechaStr.includes('T')) {
+                return fechaStr.split('T')[0];
+            }
+            return fechaStr;
+        };
+
+        const formatMoney = (value) => {
+            const numberValue = parseFloat(value);
+            if (isNaN(numberValue)) return '$0';
+            return '$' + numberValue.toLocaleString('es-CO');
+        };
+
+        const mostrarLoading = () => {
+            document.getElementById('loading').classList.remove('hidden');
+        };
+
+        const ocultarLoading = () => {
+            document.getElementById('loading').classList.add('hidden');
+        };
+
+        const mostrarEstadoConexion = (conectado) => {
+            const status = document.getElementById('connection-status');
+            if (conectado) {
+                status.textContent = '✓ Conectado';
+                status.className = 'fixed top-4 right-4 z-50 px-4 py-2 rounded-full text-sm font-medium bg-green-100 text-green-700';
+            } else {
+                status.textContent = '✗ Sin conexión';
+                status.className = 'fixed top-4 right-4 z-50 px-4 py-2 rounded-full text-sm font-medium bg-red-100 text-red-700';
+            }
+            setTimeout(() => status.className += ' opacity-0', 3000);
+        };
+
+        const mostrarError = (mensaje) => {
+            alert(`Error: ${mensaje}`);
+            console.error(mensaje);
+        };
+
+        const mostrarExito = (mensaje) => {
+            alert(`✓ ${mensaje}`);
+        };
+
+        // ========================================
+        // FUNCIONES DE SUPABASE - PRODUCTOS
+        // ========================================
+        const cargarProductos = async () => {
+            try {
+                mostrarLoading();
+                const { data, error } = await supabaseClient
+                    .from('productos')
+                    .select('*')
+                    .eq('activo', true)
+                    .order('nombre');
+                
+                if (error) throw error;
+                productos = data || [];
+                cargarProductosSelect();
+                mostrarEstadoConexion(true);
+            } catch (error) {
+                mostrarError('Error al cargar productos: ' + error.message);
+                mostrarEstadoConexion(false);
+            } finally {
+                ocultarLoading();
+            }
+        };
+
+        const agregarProducto = async () => {
+            if (!adminLoggedIn) return;
+
+            const nombre = document.getElementById('nombre-producto').value.trim();
+            const precioNat = parseFloat(document.getElementById('precio-natural').value);
+            const precioMay = parseFloat(document.getElementById('precio-mayorista').value);
+
+            if (!nombre || isNaN(precioNat) || isNaN(precioMay) || precioNat <= 0 || precioMay <= 0) {
+                alert('Por favor complete todos los campos con valores válidos.');
+                return;
+            }
+
+            try {
+                mostrarLoading();
+                const { data, error } = await supabaseClient
+                    .from('productos')
+                    .insert([{
+                        nombre: nombre,
+                        precio_natural: precioNat,
+                        precio_mayorista: precioMay
+                    }])
+                    .select();
+
+                if (error) throw error;
+
+                document.getElementById('nombre-producto').value = '';
+                document.getElementById('precio-natural').value = '';
+                document.getElementById('precio-mayorista').value = '';
+
+                await cargarProductos();
+                cargarPanelAdmin();
+                mostrarExito('Producto agregado exitosamente');
+            } catch (error) {
+                mostrarError('Error al agregar producto: ' + error.message);
+            } finally {
+                ocultarLoading();
+            }
+        };
+
+        const modificarPrecioProducto = async (id) => {
+            if (!adminLoggedIn) return;
+
+            const nuevoPrecioNat = parseFloat(document.getElementById(`precio-natural-${id}`).value);
+            const nuevoPrecioMay = parseFloat(document.getElementById(`precio-mayorista-${id}`).value);
+
+            if (isNaN(nuevoPrecioNat) || isNaN(nuevoPrecioMay) || nuevoPrecioNat <= 0 || nuevoPrecioMay <= 0) {
+                alert('Por favor ingrese precios válidos y mayores a cero.');
+                return;
+            }
+
+            try {
+                mostrarLoading();
+                const { error } = await supabaseClient
+                    .from('productos')
+                    .update({
+                        precio_natural: nuevoPrecioNat,
+                        precio_mayorista: nuevoPrecioMay
+                    })
+                    .eq('id', id);
+
+                if (error) throw error;
+
+                await cargarProductos();
+                cargarPanelAdmin();
+                mostrarExito('Precios actualizados exitosamente');
+            } catch (error) {
+                mostrarError('Error al actualizar precios: ' + error.message);
+            } finally {
+                ocultarLoading();
+            }
+        };
+
+        // ========================================
+        // FUNCIONES DE SUPABASE - CLIENTES
+        // ========================================
+        const cargarClientes = async () => {
+            try {
+                mostrarLoading();
+                const { data, error } = await supabaseClient
+                    .from('clientes')
+                    .select('*')
+                    .order('nombre');
+                
+                if (error) throw error;
+                clientes = data || [];
+                actualizarTablaClientes();
+                cargarClientesDatalist();
+            } catch (error) {
+                mostrarError('Error al cargar clientes: ' + error.message);
+            } finally {
+                ocultarLoading();
+            }
+        };
+
+        const cargarClientesDatalist = () => {
+            const datalist = document.getElementById('clientes-list');
+            datalist.innerHTML = clientes.map(c => 
+                `<option value="${c.nombre}">${c.telefono ? ' - ' + c.telefono : ''}</option>`
+            ).join('');
+        };
+
+        const buscarOCrearCliente = async (nombre, telefono, tipo, direccion) => {
+            try {
+                // Buscar cliente existente
+                let { data: clienteExistente, error: errorBusqueda } = await supabaseClient
+                    .from('clientes')
+                    .select('*')
+                    .eq('nombre', nombre)
+                    .single();
+
+                if (errorBusqueda && errorBusqueda.code !== 'PGRST116') {
+                    throw errorBusqueda;
+                }
+
+                if (clienteExistente) {
+                    // Actualizar información si es necesario
+                    if ((telefono && telefono !== clienteExistente.telefono) || 
+                        (direccion && direccion !== clienteExistente.direccion)) {
+                        await supabaseClient
+                            .from('clientes')
+                            .update({
+                                telefono: telefono || clienteExistente.telefono,
+                                direccion: direccion || clienteExistente.direccion,
+                                tipo: tipo
+                            })
+                            .eq('id', clienteExistente.id);
+                    }
+                    return clienteExistente.id;
+                } else {
+                    // Crear nuevo cliente
+                    const { data: nuevoCliente, error: errorCreacion } = await supabaseClient
+                        .from('clientes')
+                        .insert([{
+                            nombre: nombre,
+                            telefono: telefono,
+                            tipo: tipo,
+                            direccion: direccion
+                        }])
+                        .select()
+                        .single();
+
+                    if (errorCreacion) throw errorCreacion;
+                    return nuevoCliente.id;
+                }
+            } catch (error) {
+                mostrarError('Error al gestionar cliente: ' + error.message);
+                return null;
+            }
+        };
+
+        const actualizarEstadisticasCliente = async (clienteId, precioTotal, cantidad) => {
+            try {
+                const { data: cliente } = await supabaseClient
+                    .from('clientes')
+                    .select('total_comprado, arepas_compradas')
+                    .eq('id', clienteId)
+                    .single();
+
+                if (cliente) {
+                    await supabaseClient
+                        .from('clientes')
+                        .update({
+                            total_comprado: (parseFloat(cliente.total_comprado) || 0) + precioTotal,
+                            arepas_compradas: (parseInt(cliente.arepas_compradas) || 0) + cantidad
+                        })
+                        .eq('id', clienteId);
+                }
+            } catch (error) {
+                console.error('Error al actualizar estadísticas del cliente:', error);
+            }
+        };
+
+        const marcarPagado = async (id) => {
+            try {
+                mostrarLoading();
+                const { error } = await supabaseClient
+                    .from('clientes')
+                    .update({
+                        deuda: 0,
+                        estado: 'paz'
+                    })
+                    .eq('id', id);
+
+                if (error) throw error;
+
+                await cargarClientes();
+                mostrarExito('Deuda marcada como pagada');
+            } catch (error) {
+                mostrarError('Error al marcar como pagado: ' + error.message);
+            } finally {
+                ocultarLoading();
+            }
+        };
+
+        // ========================================
+        // FUNCIONES DE SUPABASE - PEDIDOS
+        // ========================================
+        const cargarPedidos = async () => {
+            const fecha = normalizarFecha(document.getElementById('fecha-pedidos').value);
+            
+            try {
+                mostrarLoading();
+                const { data, error } = await supabaseClient
+                    .from('pedidos')
+                    .select('*')
+                    .eq('fecha_entrega', fecha)
+                    .order('fecha_entrega');
+                
+                if (error) throw error;
+                
+                pedidos = data || [];
+                mostrarPedidos();
+            } catch (error) {
+                mostrarError('Error al cargar pedidos: ' + error.message);
+            } finally {
+                ocultarLoading();
+            }
+        };
+
+        const guardarPedido = async () => {
+            const nombreCliente = document.getElementById('nombre_cliente').value.trim();
+            const tipoCliente = document.getElementById('tipo_cliente').value;
+            const telefono = document.getElementById('telefono').value.trim();
+            const direccion = document.getElementById('direccion').value.trim();
+            const productoId = document.getElementById('tipo_arepa').value;
+            const cantidad = parseInt(document.getElementById('cantidad').value) || 1;
+            const fechaEntrega = document.getElementById('fecha_entrega').value;
+            const fechaRegistro = document.getElementById('fecha_registro').value;
+            const metodoPago = document.getElementById('metodo_pago').value;
+            const notas = document.getElementById('notas').value.trim();
+
+            if (!nombreCliente || !productoId || !fechaEntrega || !fechaRegistro) {
+                alert('Por favor complete los campos requeridos');
+                return;
+            }
+
+            const producto = productos.find(p => p.id == productoId);
+            if (!producto) {
+                alert('Error: Producto no encontrado.');
+                return;
+            }
+
+            const precioUnitario = tipoCliente === 'Mayorista' ? producto.precio_mayorista : producto.precio_natural;
+            const precioTotal = precioUnitario * cantidad;
+
+            try {
+                mostrarLoading();
+                
+                // Buscar o crear cliente
+                const clienteId = await buscarOCrearCliente(nombreCliente, telefono, tipoCliente, direccion);
+                
+                // Guardar pedido
+                const { data: nuevoPedido, error } = await supabaseClient
+                    .from('pedidos')
+                    .insert([{
+                        cliente_id: clienteId,
+                        nombre_cliente: nombreCliente,
+                        tipo_cliente: tipoCliente,
+                        telefono: telefono,
+                        direccion: direccion,
+                        producto_id: productoId,
+                        tipo_arepa: producto.nombre,
+                        cantidad: cantidad,
+                        precio_unitario: precioUnitario,
+                        precio_total: precioTotal,
+                        metodo_pago: metodoPago,
+                        fecha_registro: fechaRegistro,
+                        fecha_entrega: fechaEntrega,
+                        estado: 'pendiente',
+                        notas: notas
+                    }])
+                    .select()
+                    .single();
+
+                if (error) throw error;
+
+                // Actualizar estadísticas del cliente
+                if (clienteId) {
+                    await actualizarEstadisticasCliente(clienteId, precioTotal, cantidad);
+                }
+
+                cerrarModalPedido();
+                await cargarPedidos();
+                mostrarExito('Pedido guardado exitosamente');
+                cambiarTab('pedidos');
+            } catch (error) {
+                mostrarError('Error al guardar pedido: ' + error.message);
+            } finally {
+                ocultarLoading();
+            }
+        };
+
+        const marcarEntregado = async (id) => {
+            try {
+                mostrarLoading();
+                const { error } = await supabaseClient
+                    .from('pedidos')
+                    .update({ estado: 'entregado' })
+                    .eq('id', id);
+
+                if (error) throw error;
+
+                await cargarPedidos();
+                mostrarExito('Pedido marcado como entregado');
+            } catch (error) {
+                mostrarError('Error al marcar como entregado: ' + error.message);
+            } finally {
+                ocultarLoading();
+            }
+        };
+
+        const cargarTablaRegistros = async () => {
+            try {
+                mostrarLoading();
+                
+                let query = supabaseClient
+                    .from('pedidos')
+                    .select('*')
+                    .order('fecha_registro', { ascending: false });
+
+                // Aplicar filtros
+                const filtroCliente = document.getElementById('filtro-cliente').value.toLowerCase();
+                const filtroEstado = document.getElementById('filtro-estado').value;
+                const filtroFecha = document.getElementById('filtro-fecha').value;
+
+                if (filtroCliente) {
+                    query = query.ilike('nombre_cliente', `%${filtroCliente}%`);
+                }
+                
+                if (filtroEstado) {
+                    query = query.eq('estado', filtroEstado);
+                }
+                
+                if (filtroFecha) {
+                    query = query.eq('fecha_registro', filtroFecha);
+                }
+
+                const { data, error } = await query;
+                
+                if (error) throw error;
+                
+                mostrarTablaRegistros(data || []);
+            } catch (error) {
+                mostrarError('Error al cargar registros: ' + error.message);
+            } finally {
+                ocultarLoading();
+            }
+        };
+
+        // ========================================
+        // FUNCIONES DE SUPABASE - GASTOS
+        // ========================================
+        const guardarGasto = async () => {
+            const descripcion = document.getElementById('descripcion-gasto').value.trim();
+            const valor = parseFloat(document.getElementById('valor-gasto').value);
+            const fecha = normalizarFecha(document.getElementById('fecha-contabilidad').value);
+
+            if (!descripcion || isNaN(valor) || valor <= 0) {
+                alert('Por favor complete una descripción y un valor válido para el gasto.');
+                return;
+            }
+
+            try {
+                mostrarLoading();
+                const { data, error } = await supabaseClient
+                    .from('gastos')
+                    .insert([{
+                        descripcion: descripcion,
+                        valor: valor,
+                        fecha: fecha
+                    }]);
+
+                if (error) throw error;
+
+                document.getElementById('descripcion-gasto').value = '';
+                document.getElementById('valor-gasto').value = '';
+
+                await cargarContabilidad();
+                mostrarExito('Gasto registrado exitosamente');
+            } catch (error) {
+                mostrarError('Error al guardar gasto: ' + error.message);
+            } finally {
+                ocultarLoading();
+            }
+        };
+
+        const cargarContabilidad = async () => {
+            const fechaSeleccionada = normalizarFecha(document.getElementById('fecha-contabilidad').value);
+            
+            try {
+                mostrarLoading();
+                
+                // Cargar pedidos del día
+                const { data: pedidosDelDia, error: errorPedidos } = await supabaseClient
+                    .from('pedidos')
+                    .select('*')
+                    .eq('fecha_registro', fechaSeleccionada);
+                
+                if (errorPedidos) throw errorPedidos;
+
+                // Cargar gastos del día
+                const { data: gastosDelDia, error: errorGastos } = await supabaseClient
+                    .from('gastos')
+                    .select('*')
+                    .eq('fecha', fechaSeleccionada);
+                
+                if (errorGastos) throw errorGastos;
+
+                calcularYMostrarContabilidad(pedidosDelDia || [], gastosDelDia || []);
+            } catch (error) {
+                mostrarError('Error al cargar contabilidad: ' + error.message);
+            } finally {
+                ocultarLoading();
+            }
+        };
+
+        // ========================================
+        // FUNCIONES DE UI
+        // ========================================
+        const inicializar = async () => {
+            const hoy = obtenerFechaHoy();
+            
+            document.getElementById('fecha-pedidos').value = hoy;
+            document.getElementById('fecha-contabilidad').value = hoy;
+            document.getElementById('fecha_registro').value = hoy;
+            document.getElementById('fecha_entrega').value = hoy;
+            
+            await cargarProductos();
+            await cargarClientes();
+            
+            cambiarTab('pedidos');
+            actualizarReloj();
+            setInterval(actualizarReloj, 1000);
+        };
+
+        const actualizarReloj = () => {
+            const ahora = new Date();
+            document.getElementById('reloj').textContent = ahora.toLocaleTimeString('es-CO');
+        };
+
+        const cambiarTab = async (tab) => {
+            document.querySelectorAll('.tab-content').forEach(t => t.style.display = 'none');
+            
+            document.querySelectorAll('nav button').forEach(btn => {
+                if (btn.id === 'btn-admin') {
+                    btn.className = 'px-6 py-3 rounded-xl font-medium transition-all bg-gray-100 text-gray-600 hover:bg-gray-200';
+                } else {
+                    btn.className = 'px-6 py-3 rounded-xl font-medium transition-all bg-pink-100 text-pink-600 hover:bg-pink-200';
+                }
+            });
+            
+            document.getElementById(`tab-${tab}`).style.display = 'block';
+            
+            if (tab === 'admin') {
+                document.getElementById('btn-admin').className = 'px-6 py-3 rounded-xl font-medium transition-all bg-gray-700 text-white shadow-lg';
+                cargarPanelAdmin();
+            } else {
+                document.getElementById(`btn-${tab}`).className = 'px-6 py-3 rounded-xl font-medium transition-all bg-pink-500 text-white shadow-lg';
+            }
+            
+            if (tab === 'pedidos') await cargarPedidos();
+            if (tab === 'contabilidad') await cargarContabilidad();
+            if (tab === 'registro') await cargarTablaRegistros();
+        };
+
+        const mostrarSubTab = async (subTab) => {
+            document.querySelectorAll('[id^="sub-tab-"]').forEach(tab => tab.style.display = 'none');
+            document.getElementById(`sub-tab-${subTab}`).style.display = 'block';
+            
+            if (subTab === 'reportes') await generarReportes();
+            if (subTab === 'clientes') await cargarClientes();
+        };
+
+        // Modal functions
+        const abrirModalPedido = () => {
+            document.getElementById('modal-pedido').classList.remove('hidden');
+            document.getElementById('modal-pedido').classList.add('flex');
+            document.getElementById('fecha_registro').value = obtenerFechaHoy();
+            document.getElementById('fecha_entrega').value = obtenerFechaHoy();
+        };
+
+        const cerrarModalPedido = () => {
+            document.getElementById('modal-pedido').classList.add('hidden');
+            document.getElementById('modal-pedido').classList.remove('flex');
+            document.getElementById('form-pedido').reset();
+            document.getElementById('precio-total-container').style.display = 'none';
+        };
+
+        // Funciones de cálculo y visualización
+        const cargarProductosSelect = () => {
+            const select = document.getElementById('tipo_arepa');
+            select.innerHTML = '<option value="">Seleccionar tipo de arepa *</option>';
+
+            productos.forEach(prod => {
+                const option = document.createElement('option');
+                option.value = prod.id;
+                option.textContent = `${prod.nombre} (Nat: ${formatMoney(prod.precio_natural)} - May: ${formatMoney(prod.precio_mayorista)})`;
+                select.appendChild(option);
+            });
+        };
+
+        const calcularPrecio = () => {
+            const productoId = document.getElementById('tipo_arepa').value;
+            const cantidad = parseInt(document.getElementById('cantidad').value) || 1;
+            const tipoCliente = document.getElementById('tipo_cliente').value;
+
+            if (productoId) {
+                const producto = productos.find(p => p.id == productoId);
+                if (!producto) return;
+
+                const precioUnitario = tipoCliente === 'Mayorista' ? producto.precio_mayorista : producto.precio_natural;
+                const total = precioUnitario * cantidad;
+                document.getElementById('precio-total').textContent = formatMoney(total);
+                document.getElementById('precio-total-container').style.display = 'block';
+            } else {
+                document.getElementById('precio-total-container').style.display = 'none';
+            }
+        };
+
+        const mostrarPedidos = () => {
+            const lista = document.getElementById('lista-pedidos');
+            
+            if (pedidos.length === 0) {
+                lista.innerHTML = '<p class="text-center text-gray-500 py-8 text-lg">No hay pedidos para entregar en esta fecha.</p>';
+                return;
+            }
+
+            let html = '<div class="space-y-4">';
+            pedidos.forEach(pedido => {
+                const tipoClienteClass = pedido.tipo_cliente === 'Mayorista' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700';
+                const metodoPagoClass = pedido.metodo_pago === 'Efectivo' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700';
+                const metodoPagoIcon = pedido.metodo_pago === 'Efectivo' ? '💵' : '💳';
+                const estadoClass = pedido.estado === 'entregado' ? 'pedido-entregado' : 'border-pink-200';
+                const estadoBotonHTML = pedido.estado === 'pendiente' 
+                    ? `<button onclick="marcarEntregado(${pedido.id})" class="mt-3 w-full bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm">Marcar como Entregado</button>`
+                    : '<div class="mt-3 text-center font-bold text-green-700 py-2">✓ Entregado</div>';
+
+                html += `
+                    <div class="bg-pink-50 p-4 rounded-xl border-2 ${estadoClass} transition-all">
+                        <div class="flex justify-between items-start mb-2">
+                            <div class="font-bold text-pink-600 text-lg">👤 ${pedido.nombre_cliente}</div>
+                            <div class="text-lg font-bold text-gray-700">${formatMoney(pedido.precio_total)}</div>
+                        </div>
+                        <div class="space-y-1 text-gray-700">
+                            <p><strong>🏢 Tipo:</strong> <span class="ml-2 px-2 py-1 rounded-lg text-sm font-medium ${tipoClienteClass}">${pedido.tipo_cliente}</span></p>
+                            ${pedido.direccion ? `<p><strong>📍 Dirección:</strong> ${pedido.direccion}</p>` : ''}
+                            ${pedido.telefono ? `<p><strong>📞 Teléfono:</strong> ${pedido.telefono}</p>` : ''}
+                            <p><strong>🌮 Pedido:</strong> ${pedido.tipo_arepa} × ${pedido.cantidad}</p>
+                            <p><strong>💰 Pago:</strong> <span class="ml-2 px-3 py-1 rounded-full text-sm font-medium ${metodoPagoClass}">${metodoPagoIcon} ${pedido.metodo_pago}</span></p>
+                            ${pedido.notas ? `<p><strong>📝 Notas:</strong> ${pedido.notas}</p>` : ''}
+                        </div>
+                        ${estadoBotonHTML}
+                    </div>
+                `;
+            });
+            html += '</div>';
+            
+            lista.innerHTML = html;
+        };
+
+        const calcularYMostrarContabilidad = (pedidosDelDia, gastosDelDia) => {
+            let totalVendido = 0;
+            let totalArepas = 0;
+            let totalEfectivo = 0;
+            let totalTransferencias = 0;
+            let totalArepasMayorista = 0;
+            let totalEfectivoMayorista = 0;
+            let totalTransferMayorista = 0;
+
+            pedidosDelDia.forEach(pedido => {
+                totalVendido += parseFloat(pedido.precio_total);
+                totalArepas += parseInt(pedido.cantidad);
+                
+                if (pedido.metodo_pago === 'Efectivo') {
+                    totalEfectivo += parseFloat(pedido.precio_total);
+                } else {
+                    totalTransferencias += parseFloat(pedido.precio_total);
+                }
+
+                if (pedido.tipo_cliente === 'Mayorista') {
+                    totalArepasMayorista += parseInt(pedido.cantidad);
+                    if (pedido.metodo_pago === 'Efectivo') {
+                        totalEfectivoMayorista += parseFloat(pedido.precio_total);
+                    } else {
+                        totalTransferMayorista += parseFloat(pedido.precio_total);
+                    }
+                }
+            });
+            
+            const totalGastos = gastosDelDia.reduce((sum, gasto) => sum + parseFloat(gasto.valor), 0);
+            const gananciaNeta = totalVendido - totalGastos;
+
+            document.getElementById('total-arepas').textContent = totalArepas;
+            document.getElementById('total-vendido').textContent = formatMoney(totalVendido);
+            document.getElementById('total-efectivo').textContent = formatMoney(totalEfectivo);
+            document.getElementById('total-transferencias').textContent = formatMoney(totalTransferencias);
+            document.getElementById('total-gastos').textContent = formatMoney(totalGastos);
+            
+            const gananciaElement = document.getElementById('ganancia-neta');
+            gananciaElement.textContent = formatMoney(gananciaNeta);
+            gananciaElement.className = gananciaNeta < 0 ? 'text-3xl font-bold text-red-500' : 'text-3xl font-bold text-green-500';
+
+            document.getElementById('total-arepas-mayorista').textContent = totalArepasMayorista;
+            document.getElementById('total-efectivo-mayorista').textContent = formatMoney(totalEfectivoMayorista);
+            document.getElementById('total-transfer-mayorista').textContent = formatMoney(totalTransferMayorista);
+
+            const listaGastos = document.getElementById('lista-gastos');
+            if (gastosDelDia.length > 0) {
+                let html = '<h4 class="font-medium text-gray-700 text-sm mb-2">Gastos registrados:</h4><div class="space-y-2">';
+                gastosDelDia.forEach(gasto => {
+                    html += `
+                        <div class="flex justify-between items-center bg-red-50 p-3 rounded-lg border border-red-200">
+                            <span class="text-sm text-gray-700">${gasto.descripcion}</span>
+                            <span class="font-bold text-red-600">${formatMoney(gasto.valor)}</span>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+                listaGastos.innerHTML = html;
+            } else {
+                listaGastos.innerHTML = '';
+            }
+        };
+
+        const mostrarTablaRegistros = (pedidosFiltrados) => {
+            const tbody = document.getElementById('tabla-registros');
+            
+            if (pedidosFiltrados.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-gray-500 py-4">No se encontraron pedidos</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = pedidosFiltrados.map(pedido => `
+                <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-2">${pedido.fecha_registro}</td>
+                    <td class="px-4 py-2 font-medium">${pedido.nombre_cliente}</td>
+                    <td class="px-4 py-2">${pedido.tipo_arepa}</td>
+                    <td class="px-4 py-2">${pedido.cantidad}</td>
+                    <td class="px-4 py-2 font-bold">${formatMoney(pedido.precio_total)}</td>
+                    <td class="px-4 py-2">
+                        <span class="px-2 py-1 rounded-full text-xs font-medium ${
+                            pedido.estado === 'entregado' 
+                                ? 'bg-green-100 text-green-700' 
+                                : 'bg-yellow-100 text-yellow-700'
+                        }">
+                            ${pedido.estado}
+                        </span>
+                    </td>
+                    <td class="px-4 py-2">
+                        <button onclick="verDetallesPedido(${pedido.id})" class="text-blue-500 hover:text-blue-700">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        };
+
+        const filtrarPedidos = () => {
+            cargarTablaRegistros();
+        };
+
+        const verDetallesPedido = async (id) => {
+            const pedido = pedidos.find(p => p.id === id);
+            if (pedido) {
+                alert(`
+                    Detalles del Pedido:
+                    Cliente: ${pedido.nombre_cliente}
+                    Teléfono: ${pedido.telefono || 'N/A'}
+                    Dirección: ${pedido.direccion || 'N/A'}
+                    Producto: ${pedido.tipo_arepa}
+                    Cantidad: ${pedido.cantidad}
+                    Total: ${formatMoney(pedido.precio_total)}
+                    Método de Pago: ${pedido.metodo_pago}
+                    Fecha Registro: ${pedido.fecha_registro}
+                    Fecha Entrega: ${pedido.fecha_entrega}
+                    Estado: ${pedido.estado}
+                    Notas: ${pedido.notas || 'Sin notas'}
+                `);
+            }
+        };
+
+        // Funciones de Admin
+        const loginAdmin = () => {
+            const pass = document.getElementById('admin-pass').value;
+            if (pass === adminPassword) {
+                adminLoggedIn = true;
+                document.getElementById('admin-login').style.display = 'none';
+                document.getElementById('admin-panel').style.display = 'block';
+                cargarPanelAdmin();
+            } else {
+                alert('Contraseña incorrecta');
+            }
+        };
+
+        const cargarPanelAdmin = () => {
+            if (!adminLoggedIn) {
+                document.getElementById('admin-login').style.display = 'block';
+                document.getElementById('admin-panel').style.display = 'none';
+                return;
+            }
+            
+            document.getElementById('admin-login').style.display = 'none';
+            document.getElementById('admin-panel').style.display = 'block';
+
+            const lista = document.getElementById('lista-productos-admin');
+            lista.innerHTML = productos.map(prod => `
+                <div class="bg-white p-3 rounded-lg border border-gray-200 space-y-2">
+                    <strong class="text-gray-800">${prod.nombre}</strong>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block text-xs text-gray-500">Precio Natural</label>
+                            <input type="number" id="precio-natural-${prod.id}" value="${prod.precio_natural}" class="w-full p-1 border rounded text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-500">Precio Mayorista</label>
+                            <input type="number" id="precio-mayorista-${prod.id}" value="${prod.precio_mayorista}" class="w-full p-1 border rounded text-sm">
+                        </div>
+                    </div>
+                    <button onclick="modificarPrecioProducto(${prod.id})" class="w-full bg-green-500 hover:bg-green-600 text-white text-sm py-1 rounded transition-colors">
+                        💾 Guardar
+                    </button>
+                </div>
+            `).join('');
+        };
+
+        const actualizarTablaClientes = () => {
+            const tbody = document.getElementById('tabla-clientes');
+            
+            if (clientes.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center text-gray-500 py-4">No hay clientes registrados</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = clientes.map(cliente => {
+                const estadoClass = cliente.estado === 'paz' ? 'bg-green-100 text-green-700' : 
+                                   cliente.estado === 'mora' ? 'bg-red-100 text-red-700' : 
+                                   'bg-yellow-100 text-yellow-700';
+                
+                return `
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-2 font-medium">${cliente.nombre}</td>
+                        <td class="px-4 py-2">${cliente.telefono || 'N/A'}</td>
+                        <td class="px-4 py-2">
+                            <span class="px-2 py-1 rounded text-xs font-medium ${
+                                cliente.tipo === 'Mayorista' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                            }">
+                                ${cliente.tipo}
+                            </span>
+                        </td>
+                        <td class="px-4 py-2 font-bold">${formatMoney(cliente.total_comprado || 0)}</td>
+                        <td class="px-4 py-2">${cliente.arepas_compradas || 0}</td>
+                        <td class="px-4 py-2 font-bold text-red-600">${formatMoney(cliente.deuda || 0)}</td>
+                        <td class="px-4 py-2">
+                            <span class="px-2 py-1 rounded-full text-xs font-medium ${estadoClass}">
+                                ${cliente.estado.toUpperCase()}
+                            </span>
+                        </td>
+                        <td class="px-4 py-2">
+                            <button onclick="marcarPagado(${cliente.id})" class="text-green-500 hover:text-green-700 mr-2" title="Marcar como pagado">
+                                <i class="fas fa-check-circle"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        };
+
+        // Funciones de exportación
+        const exportarClientes = () => {
+            let csv = 'Nombre,Teléfono,Tipo,Total Comprado,Arepas Compradas,Deuda,Estado\n';
+            clientes.forEach(cliente => {
+                csv += `${cliente.nombre},${cliente.telefono || ''},${cliente.tipo},${cliente.total_comprado || 0},${cliente.arepas_compradas || 0},${cliente.deuda || 0},${cliente.estado}\n`;
+            });
+            
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `clientes_${obtenerFechaHoy()}.csv`;
+            a.click();
+        };
+
+        const exportarPedidos = async () => {
+            await cargarTablaRegistros();
+            // Implementar lógica de exportación similar a exportarClientes
+            alert('Función de exportar pedidos en desarrollo');
+        };
+
+        // Funciones de Reportes
+        const generarReportes = async () => {
+            if (!adminLoggedIn) return;
+            
+            // Por ahora usando datos locales para los gráficos
+            // En una implementación completa, deberías cargar datos de Supabase
+            alert('Los reportes están en desarrollo. Pronto estarán disponibles con datos de Supabase.');
+        };
+
+        // Inicializar la aplicación
+        window.onload = inicializar;
+    </script>
+</body>
+</html>
