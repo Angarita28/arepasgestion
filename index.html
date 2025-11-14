@@ -8,6 +8,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         .pedido-entregado {
             background-color: #f0fdf4 !important;
@@ -418,9 +419,12 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label class="block text-gray-700 font-medium mb-2">Cliente *</label>
-                            <div class="relative">
-                                <input type="text" id="nombre_cliente" list="clientes-list" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-pink-500 focus:border-pink-500">
+                            <div class="relative flex items-center">
+                                <input type="text" id="nombre_cliente" list="clientes-list" required class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-pink-500 focus:border-pink-500">
                                 <datalist id="clientes-list"></datalist>
+                                <button type="button" id="btn-clear-cliente" title="Limpiar selección" onclick="clearClienteSelection()" class="ml-2 text-gray-500 hover:text-gray-700 hidden">
+                                    <i class="fas fa-times-circle"></i>
+                                </button>
                             </div>
                         </div>
                         <div>
@@ -442,6 +446,9 @@
                             <select id="metodo_pago" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-pink-500 focus:border-pink-500">
                                 <option value="Efectivo">Efectivo</option>
                                 <option value="Transferencia">Transferencia</option>
+                                <option value="Crediservir">Crediservir</option>
+                                <option value="Nequi">Nequi</option>
+                                <option value="Deuda">Pagar después (Deuda)</option>
                             </select>
                         </div>
                     </div>
@@ -501,6 +508,50 @@
     </div>
 
     <!-- Botón Flotante Nuevo Pedido -->
+    
+            <!-- Modal Editar Cliente -->
+            <div id="modal-editar-cliente" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center p-4">
+                <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+                    <div class="p-6">
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-2xl font-bold text-gray-800">
+                                <i class="fas fa-user-edit text-pink-500 mr-2"></i>Editar Cliente
+                            </h2>
+                            <button onclick="cerrarModalEditarCliente()" class="text-gray-500 hover:text-gray-700">
+                                <i class="fas fa-times text-2xl"></i>
+                            </button>
+                        </div>
+
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-gray-700 font-medium mb-2">Nombre *</label>
+                                <input type="text" id="cliente-nombre-edit" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-pink-500 focus:border-pink-500">
+                            </div>
+                            <div>
+                                <label class="block text-gray-700 font-medium mb-2">Teléfono</label>
+                                <input type="text" id="cliente-telefono-edit" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-pink-500 focus:border-pink-500">
+                            </div>
+                            <div>
+                                <label class="block text-gray-700 font-medium mb-2">Tipo</label>
+                                <select id="cliente-tipo-edit" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-pink-500 focus:border-pink-500">
+                                    <option value="Natural">Natural</option>
+                                    <option value="Mayorista">Mayorista</option>
+                                </select>
+                            </div>
+
+                            <div class="flex space-x-4">
+                                <button type="button" onclick="guardarEdicionCliente()" class="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-lg transition-colors">
+                                    <i class="fas fa-save mr-2"></i>Guardar Cambios
+                                </button>
+                                <button type="button" onclick="cerrarModalEditarCliente()" class="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 font-bold py-3 rounded-lg transition-colors">
+                                    <i class="fas fa-times mr-2"></i>Cancelar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
     <button onclick="abrirModalPedido()" class="fixed bottom-8 right-8 bg-pink-500 hover:bg-pink-600 text-white rounded-full p-4 shadow-lg transition-all hover:scale-110 z-20">
         <i class="fas fa-plus text-2xl"></i>
     </button>
@@ -578,12 +629,13 @@
         };
 
         const mostrarError = (mensaje) => {
-            alert(`Error: ${mensaje}`);
+            // Mostrar error con SweetAlert2. No se usan fallbacks con alert().
+            Swal.fire({ icon: 'error', title: 'Error', text: mensaje });
             console.error(mensaje);
         };
 
         const mostrarExito = (mensaje) => {
-            alert(`✓ ${mensaje}`);
+            Swal.fire({ icon: 'success', title: 'Éxito', text: mensaje, timer: 1500, showConfirmButton: false });
         };
 
         // ========================================
@@ -618,7 +670,7 @@
             const precioMay = parseFloat(document.getElementById('precio-mayorista').value);
 
             if (!nombre || isNaN(precioNat) || isNaN(precioMay) || precioNat <= 0 || precioMay <= 0) {
-                alert('Por favor complete todos los campos con valores válidos.');
+                mostrarError('Por favor complete todos los campos con valores válidos.');
                 return;
             }
 
@@ -656,7 +708,7 @@
             const nuevoPrecioMay = parseFloat(document.getElementById(`precio-mayorista-${id}`).value);
 
             if (isNaN(nuevoPrecioNat) || isNaN(nuevoPrecioMay) || nuevoPrecioNat <= 0 || nuevoPrecioMay <= 0) {
-                alert('Por favor ingrese precios válidos y mayores a cero.');
+                mostrarError('Por favor ingrese precios válidos y mayores a cero.');
                 return;
             }
 
@@ -709,6 +761,46 @@
             datalist.innerHTML = clientes.map(c => 
                 `<option value="${c.nombre}">${c.telefono ? ' - ' + c.telefono : ''}</option>`
             ).join('');
+        };
+
+        const handleNombreClienteInput = () => {
+            const nombre = document.getElementById('nombre_cliente').value.trim();
+            const btnClear = document.getElementById('btn-clear-cliente');
+            if (!nombre) {
+                selectedClienteId = null;
+                if (btnClear) btnClear.classList.add('hidden');
+                return;
+            }
+            const cliente = clientes.find(c => c.nombre.toLowerCase() === nombre.toLowerCase());
+            if (cliente) {
+                // autocompletar campos
+                document.getElementById('telefono').value = cliente.telefono || '';
+                document.getElementById('direccion').value = cliente.direccion || '';
+                document.getElementById('tipo_cliente').value = cliente.tipo || 'Natural';
+                selectedClienteId = cliente.id;
+                // bloquear edición del nombre para evitar cambios accidentales
+                const input = document.getElementById('nombre_cliente');
+                input.readOnly = true;
+                if (btnClear) btnClear.classList.remove('hidden');
+            } else {
+                selectedClienteId = null;
+                const input = document.getElementById('nombre_cliente');
+                input.readOnly = false;
+                if (btnClear) btnClear.classList.add('hidden');
+            }
+        };
+
+        const clearClienteSelection = () => {
+            selectedClienteId = null;
+            const input = document.getElementById('nombre_cliente');
+            input.readOnly = false;
+            input.value = '';
+            document.getElementById('telefono').value = '';
+            document.getElementById('direccion').value = '';
+            document.getElementById('tipo_cliente').value = 'Natural';
+            const btnClear = document.getElementById('btn-clear-cliente');
+            if (btnClear) btnClear.classList.add('hidden');
+            input.focus();
         };
 
         const buscarOCrearCliente = async (nombre, telefono, tipo, direccion) => {
@@ -842,13 +934,13 @@
             const notas = document.getElementById('notas').value.trim();
 
             if (!nombreCliente || !productoId || !fechaEntrega || !fechaRegistro) {
-                alert('Por favor complete los campos requeridos');
+                mostrarError('Por favor complete los campos requeridos');
                 return;
             }
 
             const producto = productos.find(p => p.id == productoId);
             if (!producto) {
-                alert('Error: Producto no encontrado.');
+                mostrarError('Error: Producto no encontrado.');
                 return;
             }
 
@@ -857,48 +949,103 @@
 
             try {
                 mostrarLoading();
-                
-                // Buscar o crear cliente
-                const clienteId = await buscarOCrearCliente(nombreCliente, telefono, tipoCliente, direccion);
-                
-                // Guardar pedido
-                const { data: nuevoPedido, error } = await supabaseClient
-                    .from('pedidos')
-                    .insert([{
-                        cliente_id: clienteId,
-                        nombre_cliente: nombreCliente,
-                        tipo_cliente: tipoCliente,
-                        telefono: telefono,
-                        direccion: direccion,
-                        producto_id: productoId,
-                        tipo_arepa: producto.nombre,
-                        cantidad: cantidad,
-                        precio_unitario: precioUnitario,
-                        precio_total: precioTotal,
-                        metodo_pago: metodoPago,
-                        fecha_registro: fechaRegistro,
-                        fecha_entrega: fechaEntrega,
-                        estado: 'pendiente',
-                        notas: notas
-                    }])
-                    .select()
-                    .single();
 
-                if (error) throw error;
+                // Buscar o crear cliente (usa nombre o selectedClienteId si existe)
+                const clienteId = selectedClienteId || await buscarOCrearCliente(nombreCliente, telefono, tipoCliente, direccion);
 
-                // Actualizar estadísticas del cliente
-                if (clienteId) {
-                    await actualizarEstadisticasCliente(clienteId, precioTotal, cantidad);
+                if (editingPedidoId) {
+                    // actualizar pedido existente
+                    const { error } = await supabaseClient
+                        .from('pedidos')
+                        .update({
+                            cliente_id: clienteId,
+                            nombre_cliente: nombreCliente,
+                            tipo_cliente: tipoCliente,
+                            telefono: telefono,
+                            direccion: direccion,
+                            producto_id: productoId,
+                            tipo_arepa: producto.nombre,
+                            cantidad: cantidad,
+                            precio_unitario: precioUnitario,
+                            precio_total: precioTotal,
+                            metodo_pago: metodoPago,
+                            fecha_registro: fechaRegistro,
+                            fecha_entrega: fechaEntrega,
+                            notas: notas
+                        })
+                        .eq('id', editingPedidoId);
+
+                    if (error) throw error;
+
+                    // si es deuda
+                    if (metodoPago === 'Deuda' && clienteId) {
+                        // sumar deuda al cliente
+                        const { data: clienteData } = await supabaseClient
+                            .from('clientes')
+                            .select('deuda')
+                            .eq('id', clienteId)
+                            .single();
+                        const nuevaDeuda = (parseFloat(clienteData.deuda) || 0) + precioTotal;
+                        await supabaseClient.from('clientes').update({ deuda: nuevaDeuda, estado: 'mora' }).eq('id', clienteId);
+                    }
+
+                    editingPedidoId = null;
+                } else {
+                    // Guardar pedido nuevo
+                    const { data: nuevoPedido, error } = await supabaseClient
+                        .from('pedidos')
+                        .insert([{
+                            cliente_id: clienteId,
+                            nombre_cliente: nombreCliente,
+                            tipo_cliente: tipoCliente,
+                            telefono: telefono,
+                            direccion: direccion,
+                            producto_id: productoId,
+                            tipo_arepa: producto.nombre,
+                            cantidad: cantidad,
+                            precio_unitario: precioUnitario,
+                            precio_total: precioTotal,
+                            metodo_pago: metodoPago,
+                            fecha_registro: fechaRegistro,
+                            fecha_entrega: fechaEntrega,
+                            estado: 'pendiente',
+                            notas: notas
+                        }])
+                        .select()
+                        .single();
+
+                    if (error) throw error;
+
+                    // Actualizar estadísticas del cliente
+                    if (clienteId) {
+                        await actualizarEstadisticasCliente(clienteId, precioTotal, cantidad);
+                    }
+
+                    // si se seleccionó Deuda al crear
+                    if (metodoPago === 'Deuda' && clienteId) {
+                        const { data: clienteData } = await supabaseClient
+                            .from('clientes')
+                            .select('deuda')
+                            .eq('id', clienteId)
+                            .single();
+                        const nuevaDeuda = (parseFloat(clienteData.deuda) || 0) + precioTotal;
+                        await supabaseClient.from('clientes').update({ deuda: nuevaDeuda, estado: 'mora' }).eq('id', clienteId);
+                    }
                 }
 
                 cerrarModalPedido();
                 await cargarPedidos();
+                await cargarClientes();
                 mostrarExito('Pedido guardado exitosamente');
                 cambiarTab('pedidos');
             } catch (error) {
                 mostrarError('Error al guardar pedido: ' + error.message);
             } finally {
                 ocultarLoading();
+                // reset button text
+                const btn = document.querySelector('#form-pedido button[onclick="guardarPedido()"]');
+                if (btn) btn.textContent = 'Guardar Pedido';
+                selectedClienteId = null;
             }
         };
 
@@ -960,6 +1107,208 @@
         };
 
         // ========================================
+        // EDICIÓN / ELIMINACIÓN / DEUDAS
+        // ========================================
+        let editingPedidoId = null;
+        let selectedClienteId = null;
+
+        const abrirEditarPedido = async (id) => {
+            const pedido = pedidos.find(p => p.id === id);
+            if (!pedido) {
+                mostrarError('Pedido no encontrado para editar');
+                return;
+            }
+            // llenar formulario
+            document.getElementById('nombre_cliente').value = pedido.nombre_cliente;
+            document.getElementById('telefono').value = pedido.telefono || '';
+            document.getElementById('direccion').value = pedido.direccion || '';
+            document.getElementById('tipo_cliente').value = pedido.tipo_cliente || 'Natural';
+            document.getElementById('tipo_arepa').value = pedido.producto_id;
+            document.getElementById('cantidad').value = pedido.cantidad;
+            document.getElementById('fecha_entrega').value = normalizarFecha(pedido.fecha_entrega);
+            document.getElementById('fecha_registro').value = normalizarFecha(pedido.fecha_registro);
+            document.getElementById('metodo_pago').value = pedido.metodo_pago || 'Efectivo';
+            document.getElementById('notas').value = pedido.notas || '';
+
+            editingPedidoId = id;
+            // mostrar modal
+            abrirModalPedido();
+            // cambiar texto del botón guardar para indicar actualización
+            const btn = document.querySelector('#form-pedido button[onclick="guardarPedido()"]');
+            if (btn) btn.textContent = 'Actualizar Pedido';
+        };
+
+        const eliminarPedido = async (id) => {
+            const resp = await Swal.fire({
+                title: '¿Eliminar pedido?',
+                text: 'Esta acción no se puede deshacer.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, eliminar',
+                cancelButtonText: 'Cancelar'
+            });
+            if (!resp.isConfirmed) return;
+            try {
+                mostrarLoading();
+                const { error } = await supabaseClient
+                    .from('pedidos')
+                    .delete()
+                    .eq('id', id);
+                if (error) throw error;
+                await cargarPedidos();
+                await cargarTablaRegistros();
+                mostrarExito('Pedido eliminado');
+            } catch (error) {
+                mostrarError('Error al eliminar pedido: ' + error.message);
+            } finally {
+                ocultarLoading();
+            }
+        };
+
+        const eliminarProducto = async (id) => {
+            const resp = await Swal.fire({
+                title: '¿Eliminar producto?',
+                text: '¿Estás seguro?',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, eliminar',
+                cancelButtonText: 'Cancelar'
+            });
+            if (!resp.isConfirmed) return;
+            try {
+                mostrarLoading();
+                const { error } = await supabaseClient
+                    .from('productos')
+                    .delete()
+                    .eq('id', id);
+                if (error) throw error;
+                await cargarProductos();
+                cargarPanelAdmin();
+                mostrarExito('Producto eliminado');
+            } catch (error) {
+                mostrarError('Error al eliminar producto: ' + error.message);
+            } finally {
+                ocultarLoading();
+            }
+        };
+
+        const eliminarCliente = async (id) => {
+            const resp = await Swal.fire({
+                title: '¿Eliminar cliente?',
+                text: '¿Estás seguro?',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, eliminar',
+                cancelButtonText: 'Cancelar'
+            });
+            if (!resp.isConfirmed) return;
+            try {
+                mostrarLoading();
+                const { error } = await supabaseClient
+                    .from('clientes')
+                    .delete()
+                    .eq('id', id);
+                if (error) throw error;
+                await cargarClientes();
+                mostrarExito('Cliente eliminado');
+            } catch (error) {
+                mostrarError('Error al eliminar cliente: ' + error.message);
+            } finally {
+                ocultarLoading();
+            }
+        };
+
+        // Edición de cliente usando modal
+        let editingClienteId = null;
+
+        const editarCliente = async (id) => {
+            const cliente = clientes.find(c => c.id === id);
+            if (!cliente) return mostrarError('Cliente no encontrado');
+            editingClienteId = id;
+            document.getElementById('cliente-nombre-edit').value = cliente.nombre || '';
+            document.getElementById('cliente-telefono-edit').value = cliente.telefono || '';
+            document.getElementById('cliente-tipo-edit').value = cliente.tipo || 'Natural';
+            // mostrar modal
+            const modal = document.getElementById('modal-editar-cliente');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        };
+
+        const cerrarModalEditarCliente = () => {
+            editingClienteId = null;
+            const modal = document.getElementById('modal-editar-cliente');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            document.getElementById('cliente-nombre-edit').value = '';
+            document.getElementById('cliente-telefono-edit').value = '';
+            document.getElementById('cliente-tipo-edit').value = 'Natural';
+        };
+
+        const guardarEdicionCliente = async () => {
+            if (!editingClienteId) return mostrarError('No hay cliente seleccionado');
+            const nombre = document.getElementById('cliente-nombre-edit').value.trim();
+            const telefono = document.getElementById('cliente-telefono-edit').value.trim();
+            const tipo = document.getElementById('cliente-tipo-edit').value;
+            if (!nombre) return mostrarError('El nombre es obligatorio');
+            try {
+                mostrarLoading();
+                const { error } = await supabaseClient
+                    .from('clientes')
+                    .update({ nombre: nombre, telefono: telefono, tipo: tipo })
+                    .eq('id', editingClienteId);
+                if (error) throw error;
+                await cargarClientes();
+                mostrarExito('Cliente actualizado');
+                cerrarModalEditarCliente();
+            } catch (err) {
+                mostrarError('Error al actualizar cliente: ' + err.message);
+            } finally {
+                ocultarLoading();
+            }
+        };
+
+        const marcarComoDeuda = async (pedidoId) => {
+            try {
+                mostrarLoading();
+                // obtener pedido
+                const pedido = pedidos.find(p => p.id === pedidoId);
+                if (!pedido) throw new Error('Pedido no encontrado');
+
+                // marcar pedido como Deuda
+                const { error: err1 } = await supabaseClient
+                    .from('pedidos')
+                    .update({ metodo_pago: 'Deuda' })
+                    .eq('id', pedidoId);
+                if (err1) throw err1;
+
+                // actualizar cliente deuda
+                if (pedido.cliente_id) {
+                    // sumar deuda
+                    const { data: clienteData, error: err2 } = await supabaseClient
+                        .from('clientes')
+                        .select('deuda')
+                        .eq('id', pedido.cliente_id)
+                        .single();
+                    if (err2) throw err2;
+                    const nuevaDeuda = (parseFloat(clienteData.deuda) || 0) + parseFloat(pedido.precio_total || 0);
+                    const { error: err3 } = await supabaseClient
+                        .from('clientes')
+                        .update({ deuda: nuevaDeuda, estado: 'mora' })
+                        .eq('id', pedido.cliente_id);
+                    if (err3) throw err3;
+                }
+
+                await cargarPedidos();
+                await cargarClientes();
+                mostrarExito('Pedido marcado como deuda y cliente actualizado');
+            } catch (error) {
+                mostrarError('Error marcando deuda: ' + error.message);
+            } finally {
+                ocultarLoading();
+            }
+        };
+
+        // ========================================
         // FUNCIONES DE SUPABASE - GASTOS
         // ========================================
         const guardarGasto = async () => {
@@ -968,7 +1317,7 @@
             const fecha = normalizarFecha(document.getElementById('fecha-contabilidad').value);
 
             if (!descripcion || isNaN(valor) || valor <= 0) {
-                alert('Por favor complete una descripción y un valor válido para el gasto.');
+                mostrarError('Por favor complete una descripción y un valor válido para el gasto.');
                 return;
             }
 
@@ -1039,7 +1388,13 @@
             
             await cargarProductos();
             await cargarClientes();
-            
+            // conectar el autocompletado del nombre de cliente
+            const nombreInput = document.getElementById('nombre_cliente');
+            if (nombreInput) {
+                nombreInput.addEventListener('input', handleNombreClienteInput);
+                nombreInput.addEventListener('change', handleNombreClienteInput);
+            }
+
             cambiarTab('pedidos');
             actualizarReloj();
             setInterval(actualizarReloj, 1000);
@@ -1141,11 +1496,19 @@
             pedidos.forEach(pedido => {
                 const tipoClienteClass = pedido.tipo_cliente === 'Mayorista' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700';
                 const metodoPagoClass = pedido.metodo_pago === 'Efectivo' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700';
-                const metodoPagoIcon = pedido.metodo_pago === 'Efectivo' ? '💵' : '💳';
+                const metodoPagoIcon = pedido.metodo_pago === 'Efectivo' ? '💵' : (pedido.metodo_pago === 'Deuda' ? '⚠️' : '💳');
                 const estadoClass = pedido.estado === 'entregado' ? 'pedido-entregado' : 'border-pink-200';
                 const estadoBotonHTML = pedido.estado === 'pendiente' 
-                    ? `<button onclick="marcarEntregado(${pedido.id})" class="mt-3 w-full bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm">Marcar como Entregado</button>`
-                    : '<div class="mt-3 text-center font-bold text-green-700 py-2">✓ Entregado</div>';
+                    ? `<div class="mt-3 grid grid-cols-3 gap-2">
+                            <button onclick="marcarEntregado(${pedido.id})" class="col-span-1 bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-2 rounded-lg transition-colors text-sm">Entregado</button>
+                            <button onclick="abrirEditarPedido(${pedido.id})" class="col-span-1 bg-yellow-400 hover:bg-yellow-500 text-white font-bold py-2 px-2 rounded-lg transition-colors text-sm">Editar</button>
+                            <button onclick="eliminarPedido(${pedido.id})" class="col-span-1 bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-2 rounded-lg transition-colors text-sm">Eliminar</button>
+                        </div>`
+                    : `<div class="mt-3 flex space-x-2">
+                            <div class="text-center font-bold text-green-700 py-2">✓ Entregado</div>
+                            <button onclick="abrirEditarPedido(${pedido.id})" class="bg-yellow-400 hover:bg-yellow-500 text-white font-bold py-2 px-2 rounded-lg transition-colors text-sm">Editar</button>
+                            <button onclick="eliminarPedido(${pedido.id})" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-2 rounded-lg transition-colors text-sm">Eliminar</button>
+                        </div>`;
 
                 html += `
                     <div class="bg-pink-50 p-4 rounded-xl border-2 ${estadoClass} transition-all">
@@ -1162,6 +1525,9 @@
                             ${pedido.notas ? `<p><strong>📝 Notas:</strong> ${pedido.notas}</p>` : ''}
                         </div>
                         ${estadoBotonHTML}
+                        <div class="mt-2">
+                            <button onclick="marcarComoDeuda(${pedido.id})" class="mt-2 w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm">Marcar como Deuda</button>
+                        </div>
                     </div>
                 `;
             });
@@ -1259,8 +1625,14 @@
                         </span>
                     </td>
                     <td class="px-4 py-2">
-                        <button onclick="verDetallesPedido(${pedido.id})" class="text-blue-500 hover:text-blue-700">
+                        <button onclick="verDetallesPedido(${pedido.id})" class="text-blue-500 hover:text-blue-700 mr-2" title="Ver">
                             <i class="fas fa-eye"></i>
+                        </button>
+                        <button onclick="abrirEditarPedido(${pedido.id})" class="text-yellow-500 hover:text-yellow-700 mr-2" title="Editar">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button onclick="eliminarPedido(${pedido.id})" class="text-red-500 hover:text-red-700" title="Eliminar">
+                            <i class="fas fa-trash"></i>
                         </button>
                     </td>
                 </tr>
@@ -1274,20 +1646,22 @@
         const verDetallesPedido = async (id) => {
             const pedido = pedidos.find(p => p.id === id);
             if (pedido) {
-                alert(`
-                    Detalles del Pedido:
-                    Cliente: ${pedido.nombre_cliente}
-                    Teléfono: ${pedido.telefono || 'N/A'}
-                    Dirección: ${pedido.direccion || 'N/A'}
-                    Producto: ${pedido.tipo_arepa}
-                    Cantidad: ${pedido.cantidad}
-                    Total: ${formatMoney(pedido.precio_total)}
-                    Método de Pago: ${pedido.metodo_pago}
-                    Fecha Registro: ${pedido.fecha_registro}
-                    Fecha Entrega: ${pedido.fecha_entrega}
-                    Estado: ${pedido.estado}
-                    Notas: ${pedido.notas || 'Sin notas'}
-                `);
+                const html = `
+                    <div style="text-align:left">
+                        <p><strong>Cliente:</strong> ${pedido.nombre_cliente}</p>
+                        <p><strong>Teléfono:</strong> ${pedido.telefono || 'N/A'}</p>
+                        <p><strong>Dirección:</strong> ${pedido.direccion || 'N/A'}</p>
+                        <p><strong>Producto:</strong> ${pedido.tipo_arepa}</p>
+                        <p><strong>Cantidad:</strong> ${pedido.cantidad}</p>
+                        <p><strong>Total:</strong> ${formatMoney(pedido.precio_total)}</p>
+                        <p><strong>Método de Pago:</strong> ${pedido.metodo_pago}</p>
+                        <p><strong>Fecha Registro:</strong> ${pedido.fecha_registro}</p>
+                        <p><strong>Fecha Entrega:</strong> ${pedido.fecha_entrega}</p>
+                        <p><strong>Estado:</strong> ${pedido.estado}</p>
+                        <p><strong>Notas:</strong> ${pedido.notas || 'Sin notas'}</p>
+                    </div>
+                `;
+                Swal.fire({ title: 'Detalles del Pedido', html: html, width: 600 });
             }
         };
 
@@ -1300,7 +1674,7 @@
                 document.getElementById('admin-panel').style.display = 'block';
                 cargarPanelAdmin();
             } else {
-                alert('Contraseña incorrecta');
+                mostrarError('Contraseña incorrecta');
             }
         };
 
@@ -1316,21 +1690,24 @@
 
             const lista = document.getElementById('lista-productos-admin');
             lista.innerHTML = productos.map(prod => `
-                <div class="bg-white p-3 rounded-lg border border-gray-200 space-y-2">
-                    <strong class="text-gray-800">${prod.nombre}</strong>
-                    <div class="grid grid-cols-2 gap-2">
-                        <div>
-                            <label class="block text-xs text-gray-500">Precio Natural</label>
-                            <input type="number" id="precio-natural-${prod.id}" value="${prod.precio_natural}" class="w-full p-1 border rounded text-sm">
-                        </div>
-                        <div>
-                            <label class="block text-xs text-gray-500">Precio Mayorista</label>
-                            <input type="number" id="precio-mayorista-${prod.id}" value="${prod.precio_mayorista}" class="w-full p-1 border rounded text-sm">
+                <div class="bg-white p-3 rounded-lg border border-gray-200 space-y-2 flex items-center justify-between">
+                    <div>
+                        <strong class="text-gray-800">${prod.nombre}</strong>
+                        <div class="grid grid-cols-2 gap-2 mt-2">
+                            <div>
+                                <label class="block text-xs text-gray-500">Precio Natural</label>
+                                <input type="number" id="precio-natural-${prod.id}" value="${prod.precio_natural}" class="w-full p-1 border rounded text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs text-gray-500">Precio Mayorista</label>
+                                <input type="number" id="precio-mayorista-${prod.id}" value="${prod.precio_mayorista}" class="w-full p-1 border rounded text-sm">
+                            </div>
                         </div>
                     </div>
-                    <button onclick="modificarPrecioProducto(${prod.id})" class="w-full bg-green-500 hover:bg-green-600 text-white text-sm py-1 rounded transition-colors">
-                        💾 Guardar
-                    </button>
+                    <div class="space-y-2 ml-4">
+                        <button onclick="modificarPrecioProducto(${prod.id})" class="w-full bg-green-500 hover:bg-green-600 text-white text-sm py-1 rounded transition-colors">💾 Guardar</button>
+                        <button onclick="eliminarProducto(${prod.id})" class="w-full bg-red-500 hover:bg-red-600 text-white text-sm py-1 rounded transition-colors">🗑️ Eliminar</button>
+                    </div>
                 </div>
             `).join('');
         };
@@ -1371,6 +1748,12 @@
                             <button onclick="marcarPagado(${cliente.id})" class="text-green-500 hover:text-green-700 mr-2" title="Marcar como pagado">
                                 <i class="fas fa-check-circle"></i>
                             </button>
+                            <button onclick="editarCliente(${cliente.id})" class="text-yellow-500 hover:text-yellow-700 mr-2" title="Editar cliente">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button onclick="eliminarCliente(${cliente.id})" class="text-red-500 hover:text-red-700" title="Eliminar cliente">
+                                <i class="fas fa-trash"></i>
+                            </button>
                         </td>
                     </tr>
                 `;
@@ -1395,7 +1778,7 @@
         const exportarPedidos = async () => {
             await cargarTablaRegistros();
             // Implementar lógica de exportación similar a exportarClientes
-            alert('Función de exportar pedidos en desarrollo');
+            Swal.fire({ icon: 'info', title: 'En desarrollo', text: 'Función de exportar pedidos en desarrollo' });
         };
 
         // Funciones de Reportes
@@ -1404,7 +1787,7 @@
             
             // Por ahora usando datos locales para los gráficos
             // En una implementación completa, deberías cargar datos de Supabase
-            alert('Los reportes están en desarrollo. Pronto estarán disponibles con datos de Supabase.');
+            Swal.fire({ icon: 'info', title: 'En desarrollo', text: 'Los reportes están en desarrollo. Pronto estarán disponibles con datos de Supabase.' });
         };
 
         // Inicializar la aplicación
