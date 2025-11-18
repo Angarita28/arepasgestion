@@ -82,7 +82,7 @@
         <div class="container mx-auto px-4 py-4">
             <div class="flex items-center justify-between">
                 <div class="flex items-center space-x-3">
-                     <img src="/public/img/LogoArepas.jpeg" alt="Logo" class="w-20 h-20 object-contain">
+                     <img src="./public/img/LogoArepas.jpeg" alt="Logo" class="w-20 h-20 object-contain" onerror="this.style.display='none'">
                     <h1 class="text-2xl font-bold text-gray-800">Arepas Norly</h1>
                     <span class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">Cloud ☁️</span>
                 </div>
@@ -166,7 +166,7 @@
                     </button>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
                     <div class="bg-gradient-to-r from-blue-500 to-blue-600 text-white p-4 rounded-xl">
                         <div class="flex items-center justify-between">
                             <div>
@@ -192,6 +192,15 @@
                                 <p id="total-gastos" class="text-3xl font-bold">$0</p>
                             </div>
                             <i class="fas fa-receipt text-3xl opacity-50"></i>
+                        </div>
+                    </div>
+                    <div class="bg-gradient-to-r from-red-500 to-red-600 text-white p-4 rounded-xl">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm opacity-90">Deuda (Mora)</p>
+                                <p id="total-deuda" class="text-3xl font-bold">$0</p>
+                            </div>
+                            <i class="fas fa-exclamation-triangle text-3xl opacity-50"></i>
                         </div>
                     </div>
                     <div class="bg-gradient-to-r from-yellow-500 to-orange-500 text-white p-4 rounded-xl">
@@ -606,6 +615,12 @@
                             <option value="Natural">Natural</option>
                             <option value="Mayorista">Mayorista</option>
                         </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-gray-700 font-medium mb-2">Deuda (Mora)</label>
+                        <input type="number" step="0.01" id="cliente-deuda-edit" value="0"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-pink-500 focus:border-pink-500">
                     </div>
 
                     <div class="flex space-x-4">
@@ -1300,6 +1315,7 @@
             document.getElementById('cliente-nombre-edit').value = cliente.nombre || '';
             document.getElementById('cliente-telefono-edit').value = cliente.telefono || '';
             document.getElementById('cliente-tipo-edit').value = cliente.tipo || 'Natural';
+            document.getElementById('cliente-deuda-edit').value = parseFloat(cliente.deuda || 0);
             // mostrar modal
             const modal = document.getElementById('modal-editar-cliente');
             modal.classList.remove('hidden');
@@ -1321,12 +1337,15 @@
             const nombre = document.getElementById('cliente-nombre-edit').value.trim();
             const telefono = document.getElementById('cliente-telefono-edit').value.trim();
             const tipo = document.getElementById('cliente-tipo-edit').value;
+            const deudaVal = parseFloat(document.getElementById('cliente-deuda-edit').value) || 0;
+            const nuevoEstado = deudaVal > 0 ? 'mora' : 'paz';
+
             if (!nombre) return mostrarError('El nombre es obligatorio');
             try {
                 mostrarLoading();
                 const { error } = await supabaseClient
                     .from('clientes')
-                    .update({ nombre: nombre, telefono: telefono, tipo: tipo })
+                    .update({ nombre: nombre, telefono: telefono, tipo: tipo, deuda: deudaVal, estado: nuevoEstado })
                     .eq('id', editingClienteId);
                 if (error) throw error;
                 await cargarClientes();
@@ -1613,37 +1632,45 @@
             let totalArepas = 0;
             let totalEfectivo = 0;
             let totalTransferencias = 0;
+            let totalDeuda = 0;
             let totalArepasMayorista = 0;
             let totalEfectivoMayorista = 0;
             let totalTransferMayorista = 0;
+            let totalDeudaMayorista = 0;
 
             pedidosDelDia.forEach(pedido => {
-                totalVendido += parseFloat(pedido.precio_total);
-                totalArepas += parseInt(pedido.cantidad);
+                const precioTotal = parseFloat(pedido.precio_total) || 0;
+                totalVendido += precioTotal;
+                totalArepas += parseInt(pedido.cantidad) || 0;
 
                 if (pedido.metodo_pago === 'Efectivo') {
-                    totalEfectivo += parseFloat(pedido.precio_total);
+                    totalEfectivo += precioTotal;
+                } else if (pedido.metodo_pago === 'Deuda') {
+                    totalDeuda += precioTotal;
                 } else {
-                    totalTransferencias += parseFloat(pedido.precio_total);
+                    totalTransferencias += precioTotal;
                 }
 
                 if (pedido.tipo_cliente === 'Mayorista') {
-                    totalArepasMayorista += parseInt(pedido.cantidad);
+                    totalArepasMayorista += parseInt(pedido.cantidad) || 0;
                     if (pedido.metodo_pago === 'Efectivo') {
-                        totalEfectivoMayorista += parseFloat(pedido.precio_total);
+                        totalEfectivoMayorista += precioTotal;
+                    } else if (pedido.metodo_pago === 'Deuda') {
+                        totalDeudaMayorista += precioTotal;
                     } else {
-                        totalTransferMayorista += parseFloat(pedido.precio_total);
+                        totalTransferMayorista += precioTotal;
                     }
                 }
             });
 
-            const totalGastos = gastosDelDia.reduce((sum, gasto) => sum + parseFloat(gasto.valor), 0);
+            const totalGastos = gastosDelDia.reduce((sum, gasto) => sum + parseFloat(gasto.valor || 0), 0);
             const gananciaNeta = totalVendido - totalGastos;
 
             document.getElementById('total-arepas').textContent = totalArepas;
             document.getElementById('total-vendido').textContent = formatMoney(totalVendido);
             document.getElementById('total-efectivo').textContent = formatMoney(totalEfectivo);
             document.getElementById('total-transferencias').textContent = formatMoney(totalTransferencias);
+            document.getElementById('total-deuda').textContent = formatMoney(totalDeuda);
             document.getElementById('total-gastos').textContent = formatMoney(totalGastos);
 
             const gananciaElement = document.getElementById('ganancia-neta');
