@@ -318,6 +318,19 @@
                         </tbody>
                     </table>
                 </div>
+
+                <!-- Resumen: Total ventas (mostrado cuando hay resultados) -->
+                <div id="resumen-registros" class="mt-4 hidden">
+                    <div class="bg-gradient-to-r from-green-500 to-green-600 text-white p-4 rounded-xl shadow-lg">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm opacity-90">Total de Ventas (filtradas)</p>
+                                <p id="total-ventas-registro" class="text-3xl font-bold">$0</p>
+                            </div>
+                            <i class="fas fa-chart-line text-4xl opacity-30"></i>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -1436,6 +1449,33 @@
             }
         };
 
+        // Nueva función: eliminar gasto por id
+        const eliminarGasto = async (id) => {
+            const resp = await Swal.fire({
+                title: '¿Eliminar gasto?',
+                text: 'Esta acción no se puede deshacer.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, eliminar',
+                cancelButtonText: 'Cancelar'
+            });
+            if (!resp.isConfirmed) return;
+            try {
+                mostrarLoading();
+                const { error } = await supabaseClient
+                    .from('gastos')
+                    .delete()
+                    .eq('id', id);
+                if (error) throw error;
+                await cargarContabilidad();
+                mostrarExito('Gasto eliminado exitosamente');
+            } catch (error) {
+                mostrarError('Error al eliminar gasto: ' + error.message);
+            } finally {
+                ocultarLoading();
+            }
+        };
+
         const cargarContabilidad = async () => {
             const fechaSeleccionada = normalizarFecha(document.getElementById('fecha-contabilidad').value);
 
@@ -1681,14 +1721,23 @@
             document.getElementById('total-efectivo-mayorista').textContent = formatMoney(totalEfectivoMayorista);
             document.getElementById('total-transfer-mayorista').textContent = formatMoney(totalTransferMayorista);
 
+            // Renderizar lista de gastos con botón eliminar
             const listaGastos = document.getElementById('lista-gastos');
             if (gastosDelDia.length > 0) {
                 let html = '<h4 class="font-medium text-gray-700 text-sm mb-2">Gastos registrados:</h4><div class="space-y-2">';
                 gastosDelDia.forEach(gasto => {
                     html += `
                         <div class="flex justify-between items-center bg-red-50 p-3 rounded-lg border border-red-200">
-                            <span class="text-sm text-gray-700">${gasto.descripcion}</span>
-                            <span class="font-bold text-red-600">${formatMoney(gasto.valor)}</span>
+                            <div>
+                                <div class="text-sm text-gray-700 font-medium">${gasto.descripcion}</div>
+                                <div class="text-xs text-gray-500">${gasto.fecha || ''}</div>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <span class="font-bold text-red-600">${formatMoney(gasto.valor)}</span>
+                                <button onclick="eliminarGasto(${gasto.id})" class="text-red-500 hover:text-red-700" title="Eliminar gasto">
+                                    <i class="fas fa-trash-alt"></i>
+                                </button>
+                            </div>
                         </div>
                     `;
                 });
@@ -1699,11 +1748,14 @@
             }
         };
 
+        // Actualizar mostrarTablaRegistros para calcular y mostrar total de ventas en resumen
         const mostrarTablaRegistros = (pedidosFiltrados) => {
             const tbody = document.getElementById('tabla-registros');
+            const resumenDiv = document.getElementById('resumen-registros');
 
             if (pedidosFiltrados.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="7" class="text-center text-gray-500 py-4">No se encontraron pedidos</td></tr>';
+                if (resumenDiv) resumenDiv.classList.add('hidden');
                 return;
             }
 
@@ -1715,10 +1767,7 @@
                     <td class="px-4 py-2">${pedido.cantidad}</td>
                     <td class="px-4 py-2 font-bold">${formatMoney(pedido.precio_total)}</td>
                     <td class="px-4 py-2">
-                        <span class="px-2 py-1 rounded-full text-xs font-medium ${pedido.estado === 'entregado'
-                    ? 'bg-green-100 text-green-700'
-                    : 'bg-yellow-100 text-yellow-700'
-                }">
+                        <span class="px-2 py-1 rounded-full text-xs font-medium ${pedido.estado === 'entregado' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}">
                             ${pedido.estado}
                         </span>
                     </td>
@@ -1735,32 +1784,12 @@
                     </td>
                 </tr>
             `).join('');
-        };
 
-        const filtrarPedidos = () => {
-            cargarTablaRegistros();
-        };
-
-        const verDetallesPedido = async (id) => {
-            const pedido = pedidos.find(p => p.id === id);
-            if (pedido) {
-                const html = `
-                    <div style="text-align:left">
-                        <p><strong>Cliente:</strong> ${pedido.nombre_cliente}</p>
-                        <p><strong>Teléfono:</strong> ${pedido.telefono || 'N/A'}</p>
-                        <p><strong>Dirección:</strong> ${pedido.direccion || 'N/A'}</p>
-                        <p><strong>Producto:</strong> ${pedido.tipo_arepa}</p>
-                        <p><strong>Cantidad:</strong> ${pedido.cantidad}</p>
-                        <p><strong>Total:</strong> ${formatMoney(pedido.precio_total)}</p>
-                        <p><strong>Método de Pago:</strong> ${pedido.metodo_pago}</p>
-                        <p><strong>Fecha Registro:</strong> ${pedido.fecha_registro}</p>
-                        <p><strong>Fecha Entrega:</strong> ${pedido.fecha_entrega}</p>
-                        <p><strong>Estado:</strong> ${pedido.estado}</p>
-                        <p><strong>Notas:</strong> ${pedido.notas || 'Sin notas'}</p>
-                    </div>
-                `;
-                Swal.fire({ title: 'Detalles del Pedido', html: html, width: 600 });
-            }
+            // Calcular y mostrar total de ventas
+            const totalVentas = pedidosFiltrados.reduce((sum, pedido) => sum + parseFloat(pedido.precio_total || 0), 0);
+            const totalVentasElem = document.getElementById('total-ventas-registro');
+            if (totalVentasElem) totalVentasElem.textContent = formatMoney(totalVentas);
+            if (resumenDiv) resumenDiv.classList.remove('hidden');
         };
 
         // Funciones de Admin
